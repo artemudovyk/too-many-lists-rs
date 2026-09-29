@@ -17,10 +17,10 @@
     inputs:
     let
       systems = inputs.nixpkgs.lib.systems.flakeExposed;
-      forAllSystems = inputs.nixpkgs.lib.genAttrs systems;
+      eachSystem = inputs.nixpkgs.lib.genAttrs systems;
     in
     {
-      formatter = forAllSystems (
+      formatter = eachSystem (
         system:
         let
           pkgs = inputs.nixpkgs.legacyPackages.${system};
@@ -32,7 +32,7 @@
         treefmtEval.config.build.wrapper
       );
 
-      devShells = forAllSystems (
+      devShells = eachSystem (
         system:
         let
           pkgs = import inputs.nixpkgs {
