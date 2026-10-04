@@ -40,13 +40,17 @@
             overlays = [ (import inputs.rust-overlay) ];
           };
 
-          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-            extensions = [
-              "rust-src"
-              "rust-analyzer"
-              "clippy"
-            ];
-          };
+          rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (
+            toolchain:
+            toolchain.default.override {
+              extensions = [
+                "rust-src"
+                "rust-analyzer"
+                "clippy"
+                "miri"
+              ];
+            }
+          );
         in
         {
           default = pkgs.mkShell {
