@@ -40,7 +40,15 @@
             overlays = [ (import inputs.rust-overlay) ];
           };
 
-          rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (
+          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "clippy"
+            ];
+          };
+
+          rustNightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (
             toolchain:
             toolchain.default.override {
               extensions = [
@@ -56,6 +64,13 @@
           default = pkgs.mkShell {
             nativeBuildInputs = [
               rustToolchain
+              pkgs.cargo-nextest
+            ];
+          };
+
+          rust-nightly = pkgs.mkShell {
+            nativeBuildInputs = [
+              rustNightlyToolchain
               pkgs.cargo-nextest
             ];
           };
