@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{iter::FromIterator, marker::PhantomData, ptr::NonNull};
 
+#[derive(Eq)]
 pub struct LinkedList<T> {
     front: Link<T>,
     back: Link<T>,
