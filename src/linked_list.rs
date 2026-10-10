@@ -317,6 +317,12 @@ impl<T: fmt::Debug> fmt::Debug for LinkedList<T> {
     }
 }
 
+impl<T: PartialEq> PartialEq for LinkedList<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().eq(other.iter())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::iter::FromIterator;
@@ -534,5 +540,33 @@ mod test {
     fn debug() {
         let list = LinkedList::from_iter(["a", "b", "c"]);
         assert_eq!(format!("{:?}", list), "[\"a\", \"b\", \"c\"]")
+    }
+
+    #[test]
+    fn two_lists_are_equal_when_all_elements_are_the_same_and_in_the_same_order() {
+        let list1 = LinkedList::from_iter([1, 2, 3]);
+        let list2 = LinkedList::from_iter([1, 2, 3]);
+        assert!(list1 == list2);
+    }
+
+    #[test]
+    fn two_lists_are_not_equal_when_at_least_one_element_is_different() {
+        let list1 = LinkedList::from_iter([1, 2, 3]);
+        let list2 = LinkedList::from_iter([1, 10, 3]);
+        assert!(list1 != list2);
+    }
+
+    #[test]
+    fn two_lists_are_not_equal_when_same_elements_are_in_different_order() {
+        let list1 = LinkedList::from_iter([1, 2, 3]);
+        let list2 = LinkedList::from_iter([3, 2, 1]);
+        assert!(list1 != list2);
+    }
+
+    #[test]
+    fn two_lists_are_not_equal_when_they_have_different_lengths() {
+        let list1 = LinkedList::from_iter([1, 2, 3]);
+        let list2 = LinkedList::from_iter([1, 2, 3, 4]);
+        assert!(list1 != list2);
     }
 }
