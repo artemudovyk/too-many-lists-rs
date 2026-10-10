@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{iter::FromIterator, marker::PhantomData, ptr::NonNull};
 
 pub struct LinkedList<T> {
@@ -310,6 +311,12 @@ impl<T> FromIterator<T> for LinkedList<T> {
     }
 }
 
+impl<T: fmt::Debug> fmt::Debug for LinkedList<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter().rev()).finish()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::iter::FromIterator;
@@ -521,5 +528,11 @@ mod test {
         assert_eq!(list.pop_front(), Some(&"c"));
         assert_eq!(list.pop_front(), Some(&"b"));
         assert_eq!(list.pop_front(), Some(&"a"));
+    }
+
+    #[test]
+    fn debug() {
+        let list = LinkedList::from_iter(["a", "b", "c"]);
+        assert_eq!(format!("{:?}", list), "[\"a\", \"b\", \"c\"]")
     }
 }
