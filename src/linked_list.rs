@@ -1,7 +1,7 @@
 use core::fmt;
+use std::hash::Hash;
 use std::{iter::FromIterator, marker::PhantomData, ptr::NonNull};
 
-#[derive(Eq)]
 pub struct LinkedList<T> {
     front: Link<T>,
     back: Link<T>,
@@ -324,11 +324,34 @@ impl<T: PartialEq> PartialEq for LinkedList<T> {
     }
 }
 
+impl<T: Eq> Eq for LinkedList<T> {}
+
+impl<T: PartialOrd> PartialOrd for LinkedList<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.iter().partial_cmp(other.iter())
+    }
+}
+
+impl<T: Ord> Ord for LinkedList<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.iter().cmp(other.iter())
+    }
+}
+
+impl<T: Hash> Hash for LinkedList<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
+        for item in self.iter() {
+            item.hash(state);
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::iter::FromIterator;
-
     use super::LinkedList;
+    use std::hash::Hash;
+    use std::iter::FromIterator;
 
     #[test]
     fn test_basic_front() {
@@ -569,5 +592,63 @@ mod test {
         let list1 = LinkedList::from_iter([1, 2, 3]);
         let list2 = LinkedList::from_iter([1, 2, 3, 4]);
         assert!(list1 != list2);
+    }
+
+    mod hash {
+        use super::*;
+        use std::hash::{DefaultHasher, Hasher};
+
+        #[test]
+        fn two_lists_have_the_same_hash_if_they_are_equal() {
+            let list1 = LinkedList::from_iter([1, 2, 3]);
+            let list2 = LinkedList::from_iter([1, 2, 3]);
+            let hash1 = {
+                let mut hasher = DefaultHasher::new();
+                list1.hash(&mut hasher);
+                hasher.finish()
+            };
+            let hash2 = {
+                let mut hasher = DefaultHasher::new();
+                list2.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(hash1, hash2)
+        }
+
+        #[test]
+        fn two_lists_have_different_hash_if_elements_are_the_same_but_order_different() {
+            let list1 = LinkedList::from_iter([1, 2, 3]);
+            let list2 = LinkedList::from_iter([3, 2, 1]);
+            let hash1 = {
+                let mut hasher = DefaultHasher::new();
+                list1.hash(&mut hasher);
+                hasher.finish()
+            };
+            let hash2 = {
+                let mut hasher = DefaultHasher::new();
+                list2.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_ne!(hash1, hash2)
+        }
+
+        #[test]
+        fn lists_with_nested_lists_have_different_hashes_if_they_are_not_equal() {
+            let list1 =
+                LinkedList::from_iter([LinkedList::from_iter([1, 2]), LinkedList::from_iter([3])]);
+            let list2 =
+                LinkedList::from_iter([LinkedList::from_iter([1]), LinkedList::from_iter([2, 3])]);
+            let hash1 = {
+                let mut hasher = DefaultHasher::new();
+                list1.hash(&mut hasher);
+                hasher.finish()
+            };
+            let hash2 = {
+                let mut hasher = DefaultHasher::new();
+                list2.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_ne!(hash1, hash2)
+        }
     }
 }
