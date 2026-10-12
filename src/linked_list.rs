@@ -290,6 +290,12 @@ impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
     }
 }
 
+impl<'a, T> ExactSizeIterator for IterMut<'a, T> {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
 impl<T: Clone> Clone for LinkedList<T> {
     fn clone(&self) -> Self {
         let mut cloned = LinkedList::new();
