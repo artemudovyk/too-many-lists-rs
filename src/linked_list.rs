@@ -233,6 +233,12 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
     }
 }
 
+impl<T> ExactSizeIterator for IntoIter<T> {
+    fn len(&self) -> usize {
+        self.0.len
+    }
+}
+
 impl<T> Node<T> {
     pub fn new(elem: T) -> Self {
         Self {
