@@ -151,6 +151,14 @@ impl<T> LinkedList<T> {
     pub fn clear(&mut self) {
         while self.pop_front().is_some() {}
     }
+
+    pub fn cursor_mut(&mut self) -> CursorMut<'_, T> {
+        CursorMut {
+            cur: None,
+            list: self,
+            index: None,
+        }
+    }
 }
 
 impl<T> Default for LinkedList<T> {
@@ -372,6 +380,135 @@ impl<T: Hash> Hash for LinkedList<T> {
         for item in self.iter() {
             item.hash(state);
         }
+    }
+}
+
+unsafe impl<T: Send> Send for LinkedList<T> {}
+unsafe impl<T: Sync> Sync for LinkedList<T> {}
+
+unsafe impl<'a, T: Send> Send for Iter<'a, T> {}
+unsafe impl<'a, T: Sync> Sync for Iter<'a, T> {}
+
+unsafe impl<'a, T: Send> Send for IterMut<'a, T> {}
+unsafe impl<'a, T: Sync> Sync for IterMut<'a, T> {}
+
+/// ```compile_fail
+/// use too_many_lists_rs::linked_list::IterMut;
+///
+/// fn iter_mut_covariant<'i, 'a, T>(x: IterMut<'i, &'static T>) -> IterMut<'i, &'a T> { x }
+/// ```
+#[allow(dead_code)]
+fn iter_mut_invariant() {}
+
+pub struct CursorMut<'a, T> {
+    cur: Link<T>,
+    list: &'a mut LinkedList<T>,
+    index: Option<usize>,
+}
+
+impl<'a, T> CursorMut<'a, T> {
+    pub fn index(&self) -> Option<usize> {
+        self.index
+    }
+
+    pub fn move_next(&mut self) {
+        match self.cur {
+            Some(cur) => {
+                // This will point to None at some point that will make us wrap around the list
+                unsafe {
+                    self.cur = (*cur.as_ptr()).back;
+                }
+                self.index = self.index.map(|v| v + 1);
+            }
+            // At this point we are pointing to the ghost node, so the next will be a front node
+            // with index = 0.
+            None => {
+                self.cur = self.list.front;
+                self.index = Some(0);
+            }
+        }
+    }
+
+    pub fn move_prev(&mut self) {
+        if let Some(cur) = self.cur {
+            // This will point to None at some point that will make us wrap around the list
+            unsafe {
+                self.cur = (*cur.as_ptr()).front;
+            }
+            if self.cur.is_some() {
+                self.index = self.index.map(|v| v - 1);
+            } else {
+                self.index = None;
+            }
+        }
+        // At this point we are pointing to the ghost node, so the next will be a front node
+        // with index = 0. We check if the list is not empty to skip unnecesary work of trying to
+        // move a cursor when there's nothing in the list to point to other than a "ghost" node.
+        else if !self.list.is_empty() {
+            self.cur = self.list.back;
+            if self.cur.is_some() {
+                self.index = Some(self.list.len - 1);
+            } else {
+                self.index = None;
+            }
+        }
+    }
+
+    pub fn current(&mut self) -> Option<&mut T> {
+        self.cur.map(|node| unsafe { &mut (*node.as_ptr()).elem })
+    }
+
+    pub fn peek_next(&mut self) -> Option<&mut T> {
+        unsafe {
+            if let Some(cur) = self.cur {
+                (*cur.as_ptr()).back.map(|back| &mut (*back.as_ptr()).elem)
+            } else {
+                self.list.front.map(|front| &mut (*front.as_ptr()).elem)
+            }
+        }
+    }
+
+    pub fn peek_prev(&mut self) -> Option<&mut T> {
+        unsafe {
+            if let Some(cur) = self.cur {
+                (*cur.as_ptr())
+                    .front
+                    .map(|front| &mut (*front.as_ptr()).elem)
+            } else {
+                self.list.back.map(|back| &mut (*back.as_ptr()).elem)
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn assert_properties() {
+    fn is_send<T: Send>() {}
+    fn is_sync<T: Sync>() {}
+
+    is_send::<LinkedList<i32>>();
+    is_sync::<LinkedList<i32>>();
+
+    is_send::<IntoIter<i32>>();
+    is_sync::<IntoIter<i32>>();
+
+    is_send::<Iter<i32>>();
+    is_sync::<Iter<i32>>();
+
+    is_send::<IterMut<i32>>();
+    is_sync::<IterMut<i32>>();
+
+    // is_send::<Cursor<i32>>();
+    // is_sync::<Cursor<i32>>();
+
+    fn linked_list_covariant<'a, T>(x: LinkedList<&'static T>) -> LinkedList<&'a T> {
+        x
+    }
+    fn iter_covariant<'i, 'a, T>(x: Iter<'i, &'static T>) -> Iter<'i, &'a T> {
+        x
+    }
+    fn into_iter_covariant<'a, T>(x: IntoIter<&'static T>) -> IntoIter<&'a T> {
+        x
     }
 }
 
@@ -890,6 +1027,8 @@ mod tests_from_the_book {
     }
 
     #[test]
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    #[allow(clippy::zero_divided_by_zero)]
     fn test_ord_nan() {
         let nan = 0.0f64 / 0.0;
         let n = list_from(&[nan]);
@@ -950,5 +1089,132 @@ mod tests_from_the_book {
         assert_eq!(map.remove(&list2), Some("list2"));
 
         assert!(map.is_empty());
+    }
+
+    mod cursor {
+        use super::*;
+        use std::iter::FromIterator;
+
+        #[test]
+        fn index_is_none_when_at_ghost() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let cursor = list.cursor_mut();
+            assert_eq!(cursor.index, None);
+        }
+
+        #[test]
+        fn index_is_some_when_at_node() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            cursor.move_next();
+            assert_eq!(cursor.index, Some(0));
+        }
+
+        #[test]
+        fn current_is_none_when_at_ghost() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            assert_eq!(cursor.current(), None);
+        }
+
+        #[test]
+        fn current_is_some_when_at_ghost() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 1));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 2));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            cursor.move_next();
+            assert_eq!(cursor.current(), None);
+        }
+
+        #[test]
+        fn move_next_wraps_around_the_list_with_expected_index() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 1));
+            assert_eq!(cursor.index(), Some(0));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 2));
+            assert_eq!(cursor.index(), Some(1));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            assert_eq!(cursor.index(), Some(2));
+            cursor.move_next();
+            assert_eq!(cursor.current(), None);
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 1));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 2));
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            cursor.move_next();
+            assert_eq!(cursor.current(), None);
+            cursor.move_next();
+            assert_eq!(cursor.current(), Some(&mut 1));
+        }
+
+        #[test]
+        fn move_prev_wraps_around_the_list_with_expected_index() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            assert_eq!(cursor.index(), Some(2));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 2));
+            assert_eq!(cursor.index(), Some(1));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 1));
+            assert_eq!(cursor.index(), Some(0));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), None);
+            assert_eq!(cursor.index(), None);
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            assert_eq!(cursor.index(), Some(2));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 2));
+            assert_eq!(cursor.index(), Some(1));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 1));
+            assert_eq!(cursor.index(), Some(0));
+            cursor.move_prev();
+            assert_eq!(cursor.current(), None);
+            assert_eq!(cursor.index(), None);
+            cursor.move_prev();
+            assert_eq!(cursor.current(), Some(&mut 3));
+            assert_eq!(cursor.index(), Some(2));
+        }
+
+        #[test]
+        fn test_peek_next() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            assert_eq!(cursor.peek_next(), Some(&mut 1));
+            cursor.move_next();
+            assert_eq!(cursor.peek_next(), Some(&mut 2));
+            cursor.move_next();
+            assert_eq!(cursor.peek_next(), Some(&mut 3));
+            cursor.move_next();
+            assert_eq!(cursor.peek_next(), None);
+        }
+
+        #[test]
+        fn test_peek_prev() {
+            let mut list = LinkedList::from_iter([1, 2, 3]);
+            let mut cursor = list.cursor_mut();
+            assert_eq!(cursor.peek_prev(), Some(&mut 3));
+            cursor.move_prev();
+            assert_eq!(cursor.peek_prev(), Some(&mut 2));
+            cursor.move_prev();
+            assert_eq!(cursor.peek_prev(), Some(&mut 1));
+            cursor.move_prev();
+            assert_eq!(cursor.peek_prev(), None);
+        }
     }
 }
