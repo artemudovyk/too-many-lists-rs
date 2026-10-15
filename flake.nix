@@ -65,6 +65,8 @@
             nativeBuildInputs = [
               rustToolchain
               pkgs.cargo-nextest
+              # TODO: move to `packages` or another section?
+              pkgs.vscode-extensions.vadimcn.vscode-lldb.adapter
             ];
           };
 
@@ -72,6 +74,7 @@
             nativeBuildInputs = [
               rustNightlyToolchain
               pkgs.cargo-nextest
+              pkgs.vscode-extensions.vadimcn.vscode-lldb.adapter
             ];
           };
         }
