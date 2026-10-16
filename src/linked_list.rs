@@ -485,7 +485,7 @@ impl<'a, T> CursorMut<'a, T> {
             return std::mem::take(self.list);
         };
 
-        // If at the first element, nothing is before the list other than "ghost" node.
+        // If at the first element, nothing is before the cursor other than "ghost" node.
         // So we simply return a new list.
         if index == 0 {
             return LinkedList::new();
@@ -518,6 +518,38 @@ impl<'a, T> CursorMut<'a, T> {
         self.list.len = new_len;
         // Cursor now points to a start of the list
         self.index = Some(0);
+
+        new_list
+    }
+
+    pub fn split_after(&mut self) -> LinkedList<T> {
+        let (Some(cur), Some(index)) = (self.cur, self.index) else {
+            return std::mem::take(self.list);
+        };
+
+        // If at the last element, nothing is after the cursor other than "ghost" node.
+        // So we simply return a new list.
+        if index == (self.list.len - 1) {
+            return LinkedList::new();
+        }
+
+        let output_len = self.list.len - index - 1;
+
+        let new_list = LinkedList {
+            front: unsafe { (*cur.as_ptr()).back.inspect(|v| (*v.as_ptr()).front = None) },
+            // Either front of the cursor or the list front itself if we point to the first element
+            // in the list.
+            back: self.list.back,
+            len: output_len,
+            _ghost: PhantomData,
+        };
+
+        // Sever the connection to a newly created list
+        unsafe {
+            (*cur.as_ptr()).back = None;
+        }
+        self.list.back = Some(cur);
+        self.list.len -= output_len;
 
         new_list
     }
@@ -1330,6 +1362,76 @@ mod tests_from_the_book {
                 assert_eq!(before.len, 0);
                 assert_eq!(format!("{:?}", list), "[1, 2, 3, 4, 5]");
                 assert_eq!(list.len, 5);
+            }
+        }
+
+        mod split_after {
+            use super::*;
+
+            #[test]
+            fn when_cursor_at_ghost_node_returns_entire_list_as_new_and_leaves_empty_list_in_place()
+            {
+                let mut list = LinkedList::from_iter([1, 2, 3]);
+                let mut cursor = list.cursor_mut();
+                let after = cursor.split_after();
+                assert_eq!(format!("{:?}", after), "[1, 2, 3]");
+                assert_eq!(after.len, 3);
+                assert_eq!(format!("{:?}", list), "[]");
+                assert_eq!(list.len, 0);
+            }
+
+            #[test]
+            fn when_cursor_in_the_middle_of_list_return_new_list_and_make_cur_a_back_of_existing_one(
+            ) {
+                let mut list = LinkedList::from_iter([1, 2, 3, 4, 5]);
+                let mut cursor = list.cursor_mut();
+                cursor.move_next();
+                cursor.move_next();
+                cursor.move_next(); // move to `3`
+                let after = cursor.split_after();
+                assert_eq!(format!("{:?}", list), "[1, 2, 3]");
+                assert_eq!(list.len, 3);
+                assert_eq!(format!("{:?}", after), "[4, 5]");
+                assert_eq!(after.len, 2);
+            }
+
+            #[test]
+            fn does_not_change_index() {
+                let mut list = LinkedList::from_iter([1, 2, 3, 4, 5]);
+                let mut cursor = list.cursor_mut();
+                cursor.move_next();
+                cursor.move_next();
+                cursor.move_next(); // move to `3`
+                let _ = cursor.split_after();
+                assert_eq!(cursor.index, Some(2));
+            }
+
+            #[test]
+            fn works_when_cursor_at_the_last_element() {
+                let mut list = LinkedList::from_iter([1, 2, 3, 4, 5]);
+                let mut cursor = list.cursor_mut();
+                cursor.move_next();
+                cursor.move_next();
+                cursor.move_next();
+                cursor.move_next();
+                cursor.move_next(); // move to `5`
+                let after = cursor.split_after();
+                assert_eq!(format!("{:?}", list), "[1, 2, 3, 4, 5]");
+                assert_eq!(list.len, 5);
+                assert_eq!(format!("{:?}", after), "[]");
+                assert_eq!(after.len, 0);
+            }
+
+            #[test]
+            fn works_when_cursor_at_the_first_element() {
+                let mut list = LinkedList::from_iter([1, 2, 3, 4, 5]);
+                let mut cursor = list.cursor_mut();
+                cursor.move_next();
+                let after = cursor.split_after();
+                assert_eq!(format!("{:?}", list), "[1]");
+                assert_eq!(list.len, 1);
+                assert_eq!(format!("{:?}", after), "[2, 3, 4, 5]");
+                assert_eq!(after.len, 4);
             }
         }
     }
