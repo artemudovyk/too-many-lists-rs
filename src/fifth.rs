@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ptr};
+use std::ptr;
 
 pub struct List<T> {
     head: Link<T>,
@@ -239,6 +239,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::option_map_unit_fn)]
     fn miri_food() {
         let mut list = List::new();
 
